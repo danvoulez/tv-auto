@@ -1,0 +1,12 @@
+{
+  "allowlist_domains": ["example.com"],
+  "blacklist_keywords": ["cam", "leak"],
+  "blocked_keywords": ["kids", "gambling"],
+  "require_hd_playback_confirmation": true,
+  "min_hd_height": 720,
+  "max_concurrency": 2,
+  "navigation_timeout_ms": 30000,
+  "playback_wait_ms": 7000,
+  "seed_urls": ["https://example.com"],
+  "discovery_roots": []
+}
