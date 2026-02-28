@@ -171,3 +171,21 @@ Sites differ: different player selectors, different ways to read title/duration/
 ---
 
 This is the bold final plan: **Crawlee + Playwright + JS in the page, contract = `DiscoveryInput[]`, Rust stays the brain, optional extension and proxies for hard sites, and a clear path from “one URL” to “full discovery window in production.”**
+---
+
+## 13. Hardening++ (implemented baseline + bold extensions)
+
+### Baseline hardening now
+
+- URL canonicalization and HTTP(S)-only gate before enqueue.
+- Per-domain circuit breaker (`domain_error_budget`) to stop wasting budget on failing domains.
+- Random delay jitter per request to reduce deterministic bot fingerprints.
+- Resource-domain policy with `off/report/enforce` to monitor or block third-party resource calls outside allowlist.
+- Evidence hash (`sha256`) per accepted item to strengthen auditability and replay diagnostics.
+
+### Bold/original/effective proposals
+
+- **Proof-of-play artifacts:** persist short media proof bundle (frame hash + media timestamp + evidence hash) for high-trust compliance checks.
+- **Adapter tournament mode:** run multiple extraction strategies in parallel sampling windows and auto-promote the highest precision strategy.
+- **Preflight canary scoring:** health-check 1 URL/domain before full crawl; domains with low health get downgraded concurrency automatically.
+- **Cross-verification HD engine:** combine DOM resolution, quality menu text, and CDP media events; require quorum to mark HD on strict profiles.

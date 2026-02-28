@@ -46,5 +46,14 @@ export async function loadCrawlerConfig(argv = process.argv.slice(2)) {
     throw new Error(`Invalid crawler config:\n${message}`);
   }
 
+  base.allowlist_domains = [...new Set(base.allowlist_domains.map((d) => d.toLowerCase().trim()))];
+  base.allowed_resource_domains = [
+    ...new Set((base.allowed_resource_domains || []).map((d) => d.toLowerCase().trim()))
+  ];
+
+  if (base.random_delay_ms_max < base.random_delay_ms_min) {
+    throw new Error('Invalid crawler config: random_delay_ms_max must be >= random_delay_ms_min');
+  }
+
   return base;
 }

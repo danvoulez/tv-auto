@@ -40,6 +40,35 @@
       "minimum": 1000,
       "default": 7000
     },
+    "random_delay_ms_min": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 300
+    },
+    "random_delay_ms_max": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1200
+    },
+    "domain_error_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3
+    },
+    "resource_domain_policy": {
+      "type": "string",
+      "enum": ["off", "report", "enforce"],
+      "default": "report"
+    },
+    "allowed_resource_domains": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": []
+    },
+    "emit_evidence_hash": {
+      "type": "boolean",
+      "default": true
+    },
     "seed_urls": {
       "type": "array",
       "items": { "type": "string", "format": "uri" },

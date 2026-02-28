@@ -1,7 +1,8 @@
+import crypto from 'node:crypto';
 import { PlaywrightCrawler, RequestQueue } from 'crawlee';
 import { loadCrawlerConfig } from './lib/config.mjs';
 import { resolveAdapterForUrl } from './lib/adapters.mjs';
-import { isAllowlistedUrl, violatesKeywordPolicy } from './lib/policy.mjs';
+import { canonicalizeUrl, isAllowlistedUrl, isHttpUrl, toHostname, violatesKeywordPolicy } from './lib/policy.mjs';
 
 function makeEvent(url, status, reason, details = {}) {
   return {
@@ -13,8 +14,22 @@ function makeEvent(url, status, reason, details = {}) {
   };
 }
 
-function toDiscoveryInput(url, extracted, hdConfirmed) {
-  return {
+function randomBetween(min, max) {
+  if (max <= min) return min;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function makeEvidenceHash(payload) {
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+function isDomainAllowed(hostname, allowlistDomains, extraAllowed = []) {
+  const all = [...allowlistDomains, ...extraAllowed].map((d) => d.toLowerCase());
+  return all.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+}
+
+function toDiscoveryInput(url, extracted, hdConfirmed, evidenceHash = null) {
+  const output = {
     source_url: url,
     title: extracted.title || '',
     duration_sec: extracted.duration_sec ?? 0,
@@ -23,6 +38,9 @@ function toDiscoveryInput(url, extracted, hdConfirmed) {
     quality_signals: Array.isArray(extracted.quality_signals) ? extracted.quality_signals : [],
     hd_confirmed: hdConfirmed
   };
+
+  if (evidenceHash) output.evidence_hash = evidenceHash;
+  return output;
 }
 
 async function main() {
@@ -30,7 +48,18 @@ async function main() {
   const queue = await RequestQueue.open();
 
   const candidates = [...(config.seed_urls || []), ...(config.discovery_roots || [])];
-  for (const url of candidates) {
+  const seen = new Set();
+
+  for (const rawUrl of candidates) {
+    if (!isHttpUrl(rawUrl)) {
+      console.error(JSON.stringify(makeEvent(rawUrl, 'skipped', 'invalid_or_non_http_url')));
+      continue;
+    }
+
+    const url = canonicalizeUrl(rawUrl);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+
     if (isAllowlistedUrl(url, config.allowlist_domains)) {
       await queue.addRequest({ url, uniqueKey: url });
     } else {
@@ -40,20 +69,52 @@ async function main() {
 
   const discoveries = [];
   const events = [];
+  const domainFailures = new Map();
 
   const crawler = new PlaywrightCrawler({
     requestQueue: queue,
     maxConcurrency: config.max_concurrency,
     navigationTimeoutSecs: Math.ceil(config.navigation_timeout_ms / 1000),
+    maxRequestRetries: 1,
     launchContext: {
       launchOptions: { headless: true }
     },
     async requestHandler({ request, page, log }) {
-      const url = request.loadedUrl || request.url;
+      const url = canonicalizeUrl(request.loadedUrl || request.url);
+      const domain = toHostname(url);
+      const currentFailures = domainFailures.get(domain) || 0;
+      if (currentFailures >= config.domain_error_budget) {
+        events.push(makeEvent(url, 'skipped', 'domain_circuit_open', { domain, currentFailures }));
+        return;
+      }
+
       if (!isAllowlistedUrl(url, config.allowlist_domains)) {
         events.push(makeEvent(url, 'skipped', 'outside_allowlist_runtime'));
         return;
       }
+
+      const randomDelay = randomBetween(config.random_delay_ms_min, config.random_delay_ms_max);
+      if (randomDelay > 0) await page.waitForTimeout(randomDelay);
+
+      const crossDomainCalls = new Set();
+      await page.route('**/*', async (route) => {
+        const targetUrl = route.request().url();
+        const targetHost = toHostname(targetUrl);
+        if (!targetHost) {
+          await route.continue();
+          return;
+        }
+
+        if (!isDomainAllowed(targetHost, config.allowlist_domains, config.allowed_resource_domains)) {
+          crossDomainCalls.add(targetHost);
+          if (config.resource_domain_policy === 'enforce') {
+            await route.abort();
+            return;
+          }
+        }
+
+        await route.continue();
+      });
 
       try {
         const adapter = await resolveAdapterForUrl(url, config.adapter_overrides);
@@ -80,28 +141,41 @@ async function main() {
           return;
         }
 
-        discoveries.push(toDiscoveryInput(url, extracted, hdConfirmed));
+        const evidenceHash = config.emit_evidence_hash
+          ? makeEvidenceHash({ url, extracted, playResult, randomDelay })
+          : null;
+
+        discoveries.push(toDiscoveryInput(url, extracted, hdConfirmed, evidenceHash));
         events.push(
           makeEvent(url, 'accepted', 'ok', {
             title: extracted.title || '',
             duration_sec: extracted.duration_sec || 0,
-            hd_confirmed: hdConfirmed
+            hd_confirmed: hdConfirmed,
+            random_delay_ms: randomDelay,
+            cross_domain_calls: [...crossDomainCalls],
+            evidence_hash: evidenceHash
           })
         );
         log.info(`Accepted URL: ${url}`);
       } catch (error) {
-        events.push(makeEvent(url, 'error', 'crawl_failed', { error: String(error) }));
+        domainFailures.set(domain, currentFailures + 1);
+        events.push(makeEvent(url, 'error', 'crawl_failed', { error: String(error), domain }));
       }
     },
     failedRequestHandler({ request, error }) {
-      events.push(makeEvent(request.url, 'error', 'request_failed', { error: String(error) }));
+      const url = canonicalizeUrl(request.url);
+      const domain = toHostname(url);
+      domainFailures.set(domain, (domainFailures.get(domain) || 0) + 1);
+      events.push(makeEvent(url, 'error', 'request_failed', { error: String(error) }));
     }
   });
 
   await crawler.run();
 
   process.stdout.write(`${JSON.stringify(discoveries, null, 2)}\n`);
-  process.stderr.write(`${JSON.stringify({ crawl_events: events }, null, 2)}\n`);
+  process.stderr.write(
+    `${JSON.stringify({ crawl_events: events, domain_failures: Object.fromEntries(domainFailures) }, null, 2)}\n`
+  );
 }
 
 main().catch((error) => {
