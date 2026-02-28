@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VVTV Crawler Config",
+  "type": "object",
+  "required": ["allowlist_domains", "require_hd_playback_confirmation"],
+  "properties": {
+    "allowlist_domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "blacklist_keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "blocked_keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "require_hd_playback_confirmation": { "type": "boolean" },
+    "min_hd_height": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 720
+    },
+    "max_concurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 2
+    },
+    "navigation_timeout_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 30000
+    },
+    "playback_wait_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 7000
+    },
+    "random_delay_ms_min": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 300
+    },
+    "random_delay_ms_max": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1200
+    },
+    "domain_error_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3
+    },
+    "resource_domain_policy": {
+      "type": "string",
+      "enum": ["off", "report", "enforce"],
+      "default": "report"
+    },
+    "allowed_resource_domains": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": []
+    },
+    "emit_evidence_hash": {
+      "type": "boolean",
+      "default": true
+    },
+    "seed_urls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "default": []
+    },
+    "discovery_roots": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "default": []
+    },
+    "adapter_overrides": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "log_level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"],
+      "default": "info"
+    }
+  },
+  "additionalProperties": false
+}
