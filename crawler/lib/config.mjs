@@ -1,8 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 
-const schemaPath = path.resolve('crawler/config.schema.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const schemaPath = path.resolve(__dirname, '..', 'config.schema.json');
 
 function parseArgs(argv) {
   const args = { configPath: null, inlineUrl: null, requireHd: null };

@@ -1,6 +1,7 @@
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
+const crawlerRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_ADAPTER = 'default.mjs';
 
 function sanitizeDomain(domain) {
@@ -15,8 +16,9 @@ export async function resolveAdapterForUrl(url, overrides = {}) {
   if (override) candidates.push(override);
   candidates.push(`${sanitizeDomain(hostname)}.mjs`, DEFAULT_ADAPTER);
 
+  const adaptersDir = path.join(crawlerRoot, 'adapters');
   for (const candidate of candidates) {
-    const filePath = path.resolve('crawler/adapters', candidate);
+    const filePath = path.join(adaptersDir, candidate);
     try {
       const mod = await import(pathToFileURL(filePath).href);
       if (mod?.adapter) return mod.adapter;
